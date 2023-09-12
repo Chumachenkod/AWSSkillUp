@@ -1,13 +1,13 @@
-resource "aws_lb" "chumachenkod-alb" {
-  name               = "chumachenkod-alb"
+resource "aws_lb" "alb" {
+  name               = "${var.name}-alb"
   internal           = false
   load_balancer_type = "application"
   subnets            = var.subnets
 }
 
-resource "aws_lb_target_group" "chumachenkod-target-group" {
-  name        = "chumachenkod-target-group"
-  port        = local.port
+resource "aws_lb_target_group" "target-group" {
+  name        = "${var.name}-target-group"
+  port        = local.container_port
   protocol    = "HTTP"
   target_type = "ip"
   vpc_id      = var.vpc_id
@@ -43,14 +43,23 @@ resource "aws_route53_record" "certificate_validation" {
   zone_id         = aws_route53_zone.domain_zone.zone_id
 }
 
+resource "aws_route53_record" "ns_record_in_parent_zone" {
+  allow_overwrite = true
+  name            = local.domain_name
+  records         = aws_route53_zone.domain_zone.name_servers
+  ttl             = 60
+  type            = "NS"
+  zone_id         = local.parent_dns_zone
+}
+
 resource "aws_route53_record" "load_balancer_record" {
   zone_id = aws_route53_zone.domain_zone.zone_id
   name    = aws_route53_zone.domain_zone.name
   type    = "A"
 
   alias {
-    name                   = aws_lb.chumachenkod-alb.dns_name
-    zone_id                = aws_lb.chumachenkod-alb.zone_id
+    name                   = aws_lb.alb.dns_name
+    zone_id                = aws_lb.alb.zone_id
     evaluate_target_health = true
   }
 }
@@ -60,20 +69,21 @@ resource "aws_acm_certificate_validation" "validation" {
   validation_record_fqdns = [for record in aws_route53_record.certificate_validation : record.fqdn]
 }
 
-resource "aws_lb_listener" "chumachenkod-listener" {
-  load_balancer_arn = aws_lb.chumachenkod-alb.arn
-  port              = 443
-  ssl_policy        = "ELBSecurityPolicy-TLS13-1-2-2021-06"
-  certificate_arn   = aws_acm_certificate.tls_certificate.arn
+resource "aws_lb_listener" "listener" {
+  load_balancer_arn = aws_lb.alb.arn
+  port              = local.listener_port
+  protocol          = "HTTPS"
+  ssl_policy        = var.ssl_policy
+  certificate_arn   = aws_acm_certificate_validation.validation.certificate_arn
 
   default_action {
     type             = "forward"
-    target_group_arn = aws_lb_target_group.chumachenkod-target-group.arn
+    target_group_arn = aws_lb_target_group.target-group.arn
   }
 }
 
-resource "aws_ecs_cluster" "chumachenkod-ecs_cluster" {
-  name = "chumachenkod-skillup-cluster"
+resource "aws_ecs_cluster" "ecs_cluster" {
+  name = "${var.name}-skillup-cluster"
 
   setting {
     name  = "containerInsights"
@@ -81,29 +91,28 @@ resource "aws_ecs_cluster" "chumachenkod-ecs_cluster" {
   }
 }
 
-resource "aws_iam_role" "ecs_task_execution_role" {
-  name = "chumachenkod-ecsTaskExecutionRole"
+data "aws_iam_policy_document" "ecs_task_policy_document" {
+  statement {
+    sid = "1"
 
-  assume_role_policy = <<EOF
-{
- "Version": "2012-10-17",
- "Statement": [
-   {
-     "Action": "sts:AssumeRole",
-     "Principal": {
-       "Service": "ecs-tasks.amazonaws.com"
-     },
-     "Effect": "Allow",
-     "Sid": ""
-   }
- ]
+    actions = [
+      "sts:AssumeRole",
+    ]
+    principals {
+      type        = "Service"
+      identifiers = ["ecs-tasks.amazonaws.com"]
+    }
+  }
 }
-EOF
+
+resource "aws_iam_role" "ecs_task_execution_role" {
+  name               = "${var.name}-ecsTaskExecutionRole"
+  assume_role_policy = data.aws_iam_policy_document.ecs_task_policy_document.json
 }
 
 resource "aws_iam_role_policy_attachment" "ecs-task-execution-role-policy-attachment" {
   role       = aws_iam_role.ecs_task_execution_role.name
-  policy_arn = "arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy"
+  policy_arn = local.ecs_task_execution_policy_arn
 }
 
 module "container_definition" {
@@ -112,8 +121,8 @@ module "container_definition" {
   container_image = local.container_image
   port_mappings   = [
     {
-      "containerPort" : tostring(local.port)
-      "hostPort" : tostring(local.port)
+      "containerPort" : tostring(local.container_port)
+      "hostPort" : tostring(local.container_port)
       "protocol" : "HTTP"
     }
   ]
@@ -126,18 +135,18 @@ module "container_definition" {
   log_configuration = {
     "logDriver" = "awslogs",
     "options"   = {
-      "awslogs-group"         = "chumachenkod-log-group",
-      "awslogs-region"        = "us-east-1",
+      "awslogs-group"         = "${var.name}-log-group",
+      "awslogs-region"        = data.aws_region.current.name,
       "awslogs-stream-prefix" = "streaming"
     }
   }
 }
 
-resource "aws_ecs_task_definition" "FlaskApp" {
-  family                   = "FlaskApp"
+resource "aws_ecs_task_definition" "task_definition" {
+  family                   = "${var.name}docker_flask_task_definition"
   network_mode             = "awsvpc"
-  cpu                      = "512"
-  memory                   = "1024"
+  cpu                      = var.cpu
+  memory                   = var.ram-memory
   requires_compatibilities = ["FARGATE"]
   execution_role_arn       = aws_iam_role.ecs_task_execution_role.arn
   container_definitions    = module.container_definition.json_map_encoded_list
@@ -145,12 +154,12 @@ resource "aws_ecs_task_definition" "FlaskApp" {
 }
 
 
-resource "aws_ecs_service" "FlaskApp" {
-  name                   = "FlaskApp"
+resource "aws_ecs_service" "ecs_service" {
+  name                   = "${var.name}docker_flask_service"
   launch_type            = "FARGATE"
-  cluster                = aws_ecs_cluster.chumachenkod-ecs_cluster.id
-  desired_count          = 2
-  task_definition        = aws_ecs_task_definition.FlaskApp.arn
+  cluster                = aws_ecs_cluster.ecs_cluster.id
+  desired_count          = var.desired_tasks_count
+  task_definition        = aws_ecs_task_definition.task_definition.arn
   enable_execute_command = true
 
   network_configuration {
@@ -159,9 +168,9 @@ resource "aws_ecs_service" "FlaskApp" {
   }
 
   load_balancer {
-    target_group_arn = aws_lb_target_group.chumachenkod-target-group.arn
+    target_group_arn = aws_lb_target_group.target-group.arn
     container_name   = local.container_name
-    container_port   = local.port
+    container_port   = local.container_port
   }
 }
 
@@ -171,8 +180,11 @@ provider aws {
 }
 
 locals {
-  port            = 80
-  container_image = "253650698585.dkr.ecr.us-east-1.amazonaws.com/chumachenko_skillup_17task:${var.AppVersion}"
-  container_name  = "chumachenkod-flask-application-container"
-  domain_name     = "chumachenko.dmytro.skillup.nixsolutions.pp.ua"
+  container_port                = 80
+  container_image               = "253650698585.dkr.ecr.us-east-1.amazonaws.com/chumachenko_skillup_17task:${var.AppVersion}"
+  container_name                = "${var.name}-flask-application-container"
+  domain_name                   = "chumachenko.dmytro.skillup.nixsolutions.pp.ua"
+  listener_port                 = 443
+  ecs_task_execution_policy_arn = "arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy"
+  parent_dns_zone               = "Z04704221CYST9YCK9YKE"
 }
