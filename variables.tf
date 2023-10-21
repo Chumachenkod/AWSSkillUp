@@ -1,39 +1,39 @@
 variable "AppVersion" {
-  type = string
+  type    = string
   default = "12.0"
 }
 
-variable "vpc_id" {
-  type = string
-  default = "vpc-02643980e80e1c78b"
-}
-
-variable "subnets" {
-  type = list(string)
-  default = ["subnet-0fbec97fb10042b5d", "subnet-097c08f6ff5fdd36e"]
-}
-
 variable "name" {
-  type = string
+  type    = string
   default = "chumachenkod"
 }
 
 variable "desired_tasks_count" {
-  type = number
+  type    = number
   default = 2
 }
 
 variable "cpu" {
-  type = string
+  type    = string
   default = "512"
 }
 
 variable "ram-memory" {
-  type = string
+  type    = string
   default = "1024"
 }
 
 variable "ssl_policy" {
-  type = string
+  type    = string
   default = "ELBSecurityPolicy-TLS13-1-2-2021-06"
+}
+
+variable "domain_name" {
+  type    = string
+  default = "chumachenko.dmytro"
+}
+
+variable "vpc_cidr" {
+  type    = string
+  default = "10.0.0.0/16"
 }
