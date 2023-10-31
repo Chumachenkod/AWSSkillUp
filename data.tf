@@ -16,5 +16,5 @@ data "aws_iam_policy_document" "ecs_task_policy_document" {
 }
 
 data "aws_ecr_repository" "repository" {
-  name = "chumachenko_skillup_17task"
+  name = var.ecr_repository
 }

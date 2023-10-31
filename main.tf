@@ -2,29 +2,9 @@ module "network" {
   source           = "./modules/network"
   name             = var.name
   vpc_cidr         = var.vpc_cidr
-  ipv4_cidr_config = {
-    first = {
-      cidr = "10.0.1.0/24"
-      az   = "us-east-1a"
-    }
-    second = {
-      cidr = "10.0.2.0/24"
-      az   = "us-east-1b"
-    }
-  }
+  ipv4_cidr_config = var.ipv4_cidr_config
 
-  security_group_config = {
-    http = {
-      port     = "80"
-      protocol = "tcp"
-      ipv4     = ["77.253.252.244/32"]
-    },
-    https = {
-      port     = "443"
-      protocol = "tcp"
-      ipv4     = ["77.253.252.244/32"]
-    },
-  }
+  security_group_config = var.security_group_config
 }
 
 module "load_balancer" {
@@ -43,9 +23,9 @@ module "dns" {
   source      = "./modules/dns"
   dns_name    = module.load_balancer.dns_name
   zone_id     = module.load_balancer.zone_id
-  domain_name = "${var.domain_name}.skillup.nixsolutions.pp.ua"
+  domain_name = var.domain_name
+  parent_zone_name = "skillup.nixsolutions.pp.ua"
 }
-
 
 module "container_definition" {
   source          = "cloudposse/ecs-container-definition/aws"
@@ -68,7 +48,7 @@ module "container_definition" {
   log_configuration = {
     "logDriver" = "awslogs",
     "options"   = {
-      "awslogs-group"         = "${var.name}-log-group",
+      "awslogs-group"         = "${var.name}_log_group",
       "awslogs-region"        = data.aws_region.current.name,
       "awslogs-stream-prefix" = "streaming"
     }
@@ -76,17 +56,17 @@ module "container_definition" {
 }
 
 resource "aws_iam_role" "ecs_task_execution_role" {
-  name               = "${var.name}-ecsTaskExecutionRole"
+  name               = "${var.name}_ecsTaskExecutionRole"
   assume_role_policy = data.aws_iam_policy_document.ecs_task_policy_document.json
 }
 
-resource "aws_iam_role_policy_attachment" "ecs-task-execution-role-policy-attachment" {
+resource "aws_iam_role_policy_attachment" "ecs_task_execution_role_policy_attachment" {
   role       = aws_iam_role.ecs_task_execution_role.name
   policy_arn = local.ecs_task_execution_policy_arn
 }
 
 resource "aws_ecs_cluster" "ecs_cluster" {
-  name = "${var.name}-skillup-cluster"
+  name = "${var.name}_skillup_cluster"
 
   setting {
     name  = "containerInsights"
@@ -99,7 +79,7 @@ resource "aws_ecs_task_definition" "task_definition" {
   family                   = "${var.name}docker_flask_task_definition"
   network_mode             = "awsvpc"
   cpu                      = var.cpu
-  memory                   = var.ram-memory
+  memory                   = var.ram_memory
   requires_compatibilities = ["FARGATE"]
   execution_role_arn       = aws_iam_role.ecs_task_execution_role.arn
   container_definitions    = module.container_definition.json_map_encoded_list

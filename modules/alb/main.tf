@@ -7,7 +7,7 @@ resource "aws_lb" "alb" {
   drop_invalid_header_fields = true
 }
 
-resource "aws_lb_target_group" "target-group" {
+resource "aws_lb_target_group" "target_group" {
   name        = "${var.name}-target-group"
   port        = var.container_port
   protocol    = "HTTP"
@@ -28,6 +28,6 @@ resource "aws_lb_listener" "listener" {
 
   default_action {
     type             = "forward"
-    target_group_arn = aws_lb_target_group.target-group.arn
+    target_group_arn = aws_lb_target_group.target_group.arn
   }
 }

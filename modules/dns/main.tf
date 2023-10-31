@@ -25,7 +25,7 @@ resource "aws_route53_record" "certificate_validation" {
 }
 
 data "aws_route53_zone" "parent_zone" {
-  name        = "skillup.nixsolutions.pp.ua"
+  name        = var.parent_zone_name
   private_zone = "false"
 
 }

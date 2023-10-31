@@ -1,6 +1,6 @@
 resource "aws_vpc" "vpc" {
   tags = {
-    Name = "${var.name}-skillup"
+    Name = "${var.name}_skillup"
   }
   cidr_block = var.vpc_cidr
 }
@@ -9,7 +9,7 @@ resource "aws_internet_gateway" "gw" {
   vpc_id = aws_vpc.vpc.id
 
   tags = {
-    Name = "${var.name}-skillup"
+    Name = "${var.name}_skillup"
   }
 }
 resource "aws_default_route_table" "route_table" {
@@ -42,7 +42,7 @@ resource "aws_security_group" "vpc_sg" {
     cidr_blocks = ["0.0.0.0/0"]
   }
   tags = {
-    Name = "${var.name}-skillup"
+    Name = "${var.name}_skillup"
   }
 }
 
@@ -63,7 +63,7 @@ resource "aws_default_security_group" "default_sg" {
     cidr_blocks = ["0.0.0.0/0"]
   }
   tags = {
-    Name = "${var.name}-skillup-vpc"
+    Name = "${var.name}_skillup_vpc"
   }
 }
 
@@ -76,6 +76,6 @@ resource "aws_subnet" "subnet" {
   availability_zone = each.value["az"]
 
   tags = {
-    Name = "${var.name}-skillup"
+    Name = "${var.name}_skillup"
   }
 }
